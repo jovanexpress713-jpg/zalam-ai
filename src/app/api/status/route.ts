@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       mode: "PASSIVE_CHECKS_ONLY",
       note: "الفحص يعمل فقط على الهدف الذي يحدده مسؤول النظام في إعدادات الخادم."
     },
-    capabilities: ["chat", "local_history", "passive_security_headers", "synthetic_financial_flow_simulation", "wallet_graph_tracing"],
+    capabilities: ["chat", "local_history", "passive_security_headers", "tls_certificate_assessment"],
     generatedAt: new Date().toISOString()
   });
 }
