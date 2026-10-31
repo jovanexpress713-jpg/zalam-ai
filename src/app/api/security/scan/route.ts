@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAppAccess } from "@/lib/app-auth";
-import { lookup } from "node:dns/promises";
+import { lookup, resolveMx, resolveTxt, resolveCaa, resolveNs } from "node:dns/promises";
 import { isIP } from "node:net";
 import tls from "node:tls";
 
@@ -66,6 +66,31 @@ function inspectTls(hostname: string, port: number): Promise<TlsAssessment> {
   });
 }
 
+async function inspectDns(hostname: string) {
+  const queries = await Promise.allSettled([
+    resolveMx(hostname),
+    resolveTxt(hostname),
+    resolveCaa(hostname),
+    resolveNs(hostname)
+  ]);
+  const value = (index: number) => queries[index].status === "fulfilled" ? queries[index].value : [];
+  const mx = value(0) as { exchange: string; priority: number }[];
+  const txt = value(1) as string[][];
+  const caa = value(2) as { critical: number; issue: string; tag: string; value: string }[];
+  const ns = value(3) as string[];
+  const txtRecords = txt.map((parts) => parts.join(""));
+  return {
+    mx: mx.map((record) => ({ exchange: record.exchange, priority: record.priority })),
+    nameservers: ns,
+    caa: caa.map((record) => ({ tag: record.tag, value: record.value, critical: record.critical })),
+    mailSecurity: {
+      spfPresent: txtRecords.some((record) => record.toLowerCase().startsWith("v=spf1")),
+      dmarcPresent: txtRecords.some((record) => record.toLowerCase().startsWith("v=dmarc1"))
+    },
+    queryStatus: queries.map((result) => result.status === "fulfilled" ? "resolved" : "not_published_or_unavailable")
+  };
+}
+
 const checks = [
   { header: "strict-transport-security", title: "HSTS", recommendation: "فعّل Strict-Transport-Security على HTTPS." },
   { header: "content-security-policy", title: "Content Security Policy", recommendation: "أضف سياسة CSP مناسبة لتقليل مخاطر حقن المحتوى." },
@@ -104,7 +129,7 @@ export async function POST(req: NextRequest) {
     if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
       return NextResponse.json({ error: "تم رفض الهدف لأن اسم المضيف لا يحلّ إلى عناوين عامة مسموح بها." }, { status: 403 });
     }
-    const tlsAssessment = await inspectTls(target.hostname, Number(target.port || 443));
+    const [tlsAssessment, dnsAssessment] = await Promise.all([\n      inspectTls(target.hostname, Number(target.port || 443)),\n      inspectDns(target.hostname)\n    ]);
     const response = await fetch(target, {
       method: "HEAD",
       redirect: "manual",
@@ -129,12 +154,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       target: target.origin,
       mode: "PASSIVE_HTTP_AND_TLS_CONFIGURATION",
-      tls: tlsAssessment,
+      tls: tlsAssessment,\n      dns: dnsAssessment,
       httpStatus: response.status,
       checkedAt: new Date().toISOString(),
       summary: { total: results.length, passed: results.length - missing, needsReview: missing },
       results,
-      limitations: ["يفحص ترويسات HTTP ومصافحة TLS فقط؛ لا يثبت خلو الموقع من الثغرات.", "يستخدم الفحص طلب HEAD ومصافحة TLS دون تنزيل محتوى الصفحة أو تعديل بيانات.", "تُرفض عناوين DNS الخاصة والمحلية؛ استخدم نطاقًا عامًا مخصصًا للمختبر."]
+      limitations: ["يفحص ترويسات HTTP ومصافحة TLS وسجلات DNS العامة فقط؛ لا يثبت خلو الموقع من الثغرات.", "يستخدم الفحص طلب HEAD ومصافحة TLS دون تنزيل محتوى الصفحة أو تعديل بيانات.", "تُرفض عناوين DNS الخاصة والمحلية؛ استخدم نطاقًا عامًا مخصصًا للمختبر."]
     });
   } catch {
     return NextResponse.json({ error: "تعذر الوصول إلى هدف المختبر ضمن مهلة 10 ثوانٍ." }, { status: 502 });
