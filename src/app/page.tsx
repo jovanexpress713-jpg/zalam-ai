@@ -6,7 +6,8 @@ type Message = { role: "user" | "assistant"; content: string };
 type ScanResult = {
   target: string;
   mode: string;
-  tls?: { authorized: boolean; authorizationError: string | null; protocol: string | null; cipher: string | null; certificateValidTo: string | null };\n  dns?: { mx: { exchange: string; priority: number }[]; nameservers: string[]; caa: { issue: string | null; issuewild: string | null; iodef: string | null; critical: number }[]; mailSecurity: { spfPresent: boolean; dmarcPresent: boolean } };
+  tls?: { authorized: boolean; authorizationError: string | null; protocol: string | null; cipher: string | null; certificateValidTo: string | null };
+  dns?: { mx: { exchange: string; priority: number }[]; nameservers: string[]; caa: { issue: string | null; issuewild: string | null; iodef: string | null; critical: number }[]; mailSecurity: { spfPresent: boolean; dmarcPresent: boolean } };
   httpStatus: number;
   checkedAt: string;
   summary: { total: number; passed: number; needsReview: number };
