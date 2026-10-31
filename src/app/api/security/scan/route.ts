@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAppAccess } from "@/lib/app-auth";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import tls from "node:tls";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,46 @@ function isPublicAddress(address: string): boolean {
     return normalized.startsWith("2") || normalized.startsWith("3");
   }
   return false;
+}
+
+type TlsAssessment = {
+  authorized: boolean;
+  authorizationError: string | null;
+  protocol: string | null;
+  cipher: string | null;
+  certificateValidTo: string | null;
+};
+
+function inspectTls(hostname: string, port: number): Promise<TlsAssessment> {
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect({
+      host: hostname,
+      port,
+      servername: hostname,
+      rejectUnauthorized: false,
+      timeout: 8000
+    });
+    const finish = (error?: Error) => {
+      if (error) {
+        socket.destroy();
+        reject(error);
+        return;
+      }
+      const certificate = socket.getPeerCertificate();
+      const result: TlsAssessment = {
+        authorized: socket.authorized,
+        authorizationError: socket.authorizationError ? String(socket.authorizationError) : null,
+        protocol: socket.getProtocol() ?? null,
+        cipher: socket.getCipher()?.name ?? null,
+        certificateValidTo: certificate?.valid_to ?? null
+      };
+      socket.end();
+      resolve(result);
+    };
+    socket.once("secureConnect", () => finish());
+    socket.once("timeout", () => finish(new Error("TLS handshake timeout")));
+    socket.once("error", (error) => finish(error));
+  });
 }
 
 const checks = [
@@ -63,6 +104,7 @@ export async function POST(req: NextRequest) {
     if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
       return NextResponse.json({ error: "تم رفض الهدف لأن اسم المضيف لا يحلّ إلى عناوين عامة مسموح بها." }, { status: 403 });
     }
+    const tlsAssessment = await inspectTls(target.hostname, Number(target.port || 443));
     const response = await fetch(target, {
       method: "HEAD",
       redirect: "manual",
@@ -86,12 +128,13 @@ export async function POST(req: NextRequest) {
     const missing = results.filter((item) => item.status !== "present").length;
     return NextResponse.json({
       target: target.origin,
-      mode: "PASSIVE_HTTP_CONFIGURATION",
+      mode: "PASSIVE_HTTP_AND_TLS_CONFIGURATION",
+      tls: tlsAssessment,
       httpStatus: response.status,
       checkedAt: new Date().toISOString(),
       summary: { total: results.length, passed: results.length - missing, needsReview: missing },
       results,
-      limitations: ["هذا فحص سلبي لترويسات HTTP فقط؛ لا يثبت خلو الموقع من الثغرات.", "يستخدم الفحص طلب HEAD دون تنزيل محتوى الصفحة أو تعديل بيانات.", "تُرفض عناوين DNS الخاصة والمحلية؛ استخدم نطاقًا عامًا مخصصًا للمختبر."]
+      limitations: ["يفحص ترويسات HTTP ومصافحة TLS فقط؛ لا يثبت خلو الموقع من الثغرات.", "يستخدم الفحص طلب HEAD ومصافحة TLS دون تنزيل محتوى الصفحة أو تعديل بيانات.", "تُرفض عناوين DNS الخاصة والمحلية؛ استخدم نطاقًا عامًا مخصصًا للمختبر."]
     });
   } catch {
     return NextResponse.json({ error: "تعذر الوصول إلى هدف المختبر ضمن مهلة 10 ثوانٍ." }, { status: 502 });
