@@ -11,11 +11,15 @@ function isRecord(value: unknown): value is Record<string, any> {
 export async function POST(req: NextRequest) {
   const denied = requireAppAccess(req);
   if (denied) return denied;
-  const length = Number(req.headers.get("content-length") || 0);
-  if (length > 1_048_576) return NextResponse.json({ error: "حجم ملف OpenAPI يتجاوز الحد المسموح (1 MB)." }, { status: 413 });
+  let rawBody: string;
+  try { rawBody = await req.text(); }
+  catch { return NextResponse.json({ error: "تعذرت قراءة الملف المرسل." }, { status: 400 }); }
+  if (Buffer.byteLength(rawBody, "utf8") > 1_048_576) {
+    return NextResponse.json({ error: "حجم ملف OpenAPI يتجاوز الحد المسموح (1 MB)." }, { status: 413 });
+  }
 
   let body: unknown;
-  try { body = await req.json(); }
+  try { body = JSON.parse(rawBody); }
   catch { return NextResponse.json({ error: "أرسل JSON صالحًا بالشكل { spec: {...} }." }, { status: 400 }); }
   if (!isRecord(body) || !isRecord(body.spec)) return NextResponse.json({ error: "لم يتم العثور على كائن spec صالح." }, { status: 400 });
 
