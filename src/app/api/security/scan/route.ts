@@ -76,7 +76,7 @@ async function inspectDns(hostname: string) {
   const value = (index: number) => queries[index].status === "fulfilled" ? queries[index].value : [];
   const mx = value(0) as { exchange: string; priority: number }[];
   const txt = value(1) as string[][];
-  const caa = value(2) as { critical: number; issue: string; tag: string; value: string }[];
+  const caa = value(2) as { critical: number; issue?: string; issuewild?: string; iodef?: string }[];
   const ns = value(3) as string[];
   const txtRecords = txt.map((parts) => parts.join(""));
   return {
