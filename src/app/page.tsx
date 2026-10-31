@@ -87,6 +87,26 @@ export default function Home() {
     } finally { setLabBusy(false); }
   }
 
+  function exportScanReport() {
+    if (!scanResult) return;
+    const report = {
+      product: "ZALAM AI",
+      reportType: "PASSIVE_HTTP_CONFIGURATION",
+      generatedAt: new Date().toISOString(),
+      assessment: scanResult,
+      disclaimer: "Passive HTTP response-header review only. This is not a penetration test and does not establish that the target is free of vulnerabilities."
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "zalam-security-assessment.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function send(e: FormEvent) {
     e.preventDefault();
     const text = prompt.trim();
@@ -137,6 +157,7 @@ export default function Home() {
           {scanResult && <div className="mt-4 rounded-xl border border-white/10 p-4">
             <div className="flex flex-wrap justify-between gap-2"><b>نتيجة الفحص: {scanResult.target}</b><span className="text-xs text-slate-400">HTTP {scanResult.httpStatus}</span></div>
             <p className="mt-2 text-sm">اجتاز {scanResult.summary.passed} من {scanResult.summary.total} · يحتاج مراجعة {scanResult.summary.needsReview}</p>
+            <button type="button" onClick={exportScanReport} className="mt-3 rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200">تصدير التقرير JSON</button>
             <ul className="mt-3 space-y-2">{scanResult.results.map((item) => <li key={item.name} className="flex flex-wrap justify-between gap-2 border-t border-white/10 pt-2 text-sm"><span>{item.name}</span><span className={item.status === "present" ? "text-emerald-400" : "text-amber-300"}>{item.status === "present" ? "موجود" : "يحتاج مراجعة"}</span>{item.recommendation && <p className="w-full text-xs text-slate-400">{item.recommendation}</p>}</li>)}</ul>
             <p className="mt-3 text-xs leading-6 text-slate-500">{scanResult.limitations.join(" ")}</p>
           </div>}
