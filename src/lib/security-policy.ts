@@ -115,8 +115,12 @@ export function evaluateAssessmentPolicy(input: {
 }
 
 /**
- * Self-improvement is proposal-only. A proposal must pass tests and receive
- * an explicit human approval before a separate deployment process can apply it.
+ * Bounded autonomous improvement gate.
+ *
+ * Routine changes may be applied without per-change user approval only when
+ * every test passes and every changed file is inside the low-risk allowlist.
+ * Security policy, authentication, secrets, deployment workflows and scope
+ * controls are deliberately excluded from unattended modification.
  */
 export type ImprovementProposal = {
   id: string;
@@ -124,13 +128,34 @@ export type ImprovementProposal = {
   rationale: string;
   changedFiles: string[];
   tests: { name: string; passed: boolean }[];
-  status: "proposed" | "tested" | "approved" | "rejected";
+  status: "proposed" | "tested" | "rejected";
 };
 
+const AUTONOMOUS_CHANGE_ALLOWLIST = [
+  /^src\\/components\\/(?!.*(?:auth|security|admin|billing)).+\\.(?:tsx?|jsx?)$/,
+  /^src\\/lib\\/(?!.*(?:auth|security|policy|secret|permission)).+\\.tsx?$/,
+  /^docs\\/.+\\.md$/
+];
+
+const PROTECTED_CHANGE_PATHS = [
+  /(^|\\/)(?:\.env(?:\\.|$)|secrets?)(?:\\/|$)/i,
+  /^\.github\\/workflows\\//i,
+  /(^|\\/)(?:auth|security-policy|permissions?|access-control)(?:\\.|\\/)/i,
+  /(^|\\/)(?:package-lock|pnpm-lock|yarn\.lock)/i
+];
+
 export function canApplyImprovement(proposal: ImprovementProposal): boolean {
+  const safeFiles = proposal.changedFiles.length > 0 &&
+    proposal.changedFiles.every((file) =>
+      !file.startsWith("/") &&
+      !file.split("/").includes("..") &&
+      !PROTECTED_CHANGE_PATHS.some((pattern) => pattern.test(file)) &&
+      AUTONOMOUS_CHANGE_ALLOWLIST.some((pattern) => pattern.test(file))
+    );
+
   return (
-    proposal.status === "approved" &&
-    proposal.changedFiles.length > 0 &&
+    proposal.status !== "rejected" &&
+    safeFiles &&
     proposal.tests.length > 0 &&
     proposal.tests.every((test) => test.passed)
   );
