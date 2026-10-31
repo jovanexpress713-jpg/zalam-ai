@@ -1,7 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAppAccess } from "@/lib/app-auth";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 
 export const runtime = "nodejs";
+
+function isPublicAddress(address: string): boolean {
+  if (isIP(address) === 4) {
+    const p = address.split(".").map(Number);
+    const [a, b] = p;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && (b === 0 || b === 168)) return false;
+    if (a === 198 && (p[2] === 18 || p[2] === 19 || p[2] === 51)) return false;
+    if (a === 203 && b === 0 && p[2] === 113) return false;
+    return true;
+  }
+  if (isIP(address) === 6) {
+    const normalized = address.toLowerCase();
+    return normalized.startsWith("2") || normalized.startsWith("3");
+  }
+  return false;
+}
 
 const checks = [
   { header: "strict-transport-security", title: "HSTS", recommendation: "فعّل Strict-Transport-Security على HTTPS." },
@@ -37,11 +59,15 @@ export async function POST(req: NextRequest) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
+    const addresses = await lookup(target.hostname, { all: true, verbatim: true });
+    if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
+      return NextResponse.json({ error: "تم رفض الهدف لأن اسم المضيف لا يحلّ إلى عناوين عامة مسموح بها." }, { status: 403 });
+    }
     const response = await fetch(target, {
-      method: "GET",
+      method: "HEAD",
       redirect: "manual",
       signal: controller.signal,
-      headers: { "User-Agent": "ZALAM-AI-Passive-Security-Check/1.0", "Range": "bytes=0-0" },
+      headers: { "User-Agent": "ZALAM-AI-Passive-Security-Check/1.0" },
       cache: "no-store"
     });
     const results = checks.map((check) => ({
@@ -65,7 +91,7 @@ export async function POST(req: NextRequest) {
       checkedAt: new Date().toISOString(),
       summary: { total: results.length, passed: results.length - missing, needsReview: missing },
       results,
-      limitations: ["هذا فحص سلبي لترويسات HTTP فقط؛ لا يثبت خلو الموقع من الثغرات.", "لم يتم تنفيذ استغلال أو تخمين كلمات مرور أو تعديل بيانات."]
+      limitations: ["هذا فحص سلبي لترويسات HTTP فقط؛ لا يثبت خلو الموقع من الثغرات.", "يستخدم الفحص طلب HEAD دون تنزيل محتوى الصفحة أو تعديل بيانات.", "تُرفض عناوين DNS الخاصة والمحلية؛ استخدم نطاقًا عامًا مخصصًا للمختبر."]
     });
   } catch {
     return NextResponse.json({ error: "تعذر الوصول إلى هدف المختبر ضمن مهلة 10 ثوانٍ." }, { status: 502 });
