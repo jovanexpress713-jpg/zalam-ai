@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
   const schemes = isRecord(spec.components) && isRecord(spec.components.securitySchemes) ? Object.keys(spec.components.securitySchemes) : [];
   const paths = Object.entries(spec.paths);
   let operations = 0;
-  let unauthenticated = 0;\n  const operationIds = new Map<string, string>();
+  let unauthenticated = 0;
+  const operationIds = new Map<string, string>();
   if (!schemes.length) findings.push({
     severity: "high", code: "NO_SECURITY_SCHEMES", location: "components.securitySchemes",
     message: "لا توجد آليات مصادقة معرفة في ملف المواصفات.",
@@ -84,7 +85,12 @@ export async function POST(req: NextRequest) {
         message: "عملية تعديل أو إنشاء لا توثق requestBody.",
         recommendation: "تحقق مما إذا كانت العملية تحتاج جسم طلب موثقًا؛ قد يكون غيابه مقصودًا."
       });
-      if (typeof operation.operationId === "string" && operation.operationId.trim()) {\n        const previous = operationIds.get(operation.operationId);\n        if (previous) findings.push({ severity: "medium", code: "DUPLICATE_OPERATION_ID", location, message: `operationId مكرر: ${operation.operationId} (ظهر سابقًا في ${previous}).`, recommendation: "اجعل operationId فريدًا لكل عملية." });\n        else operationIds.set(operation.operationId, location);\n      }\n      if (!operation.operationId) findings.push({
+      if (typeof operation.operationId === "string" && operation.operationId.trim()) {
+        const previous = operationIds.get(operation.operationId);
+        if (previous) findings.push({ severity: "medium", code: "DUPLICATE_OPERATION_ID", location, message: `operationId مكرر: ${operation.operationId} (ظهر سابقًا في ${previous}).`, recommendation: "اجعل operationId فريدًا لكل عملية." });
+        else operationIds.set(operation.operationId, location);
+      }
+      if (!operation.operationId) findings.push({
         severity: "info", code: "MISSING_OPERATION_ID", location,
         message: "العملية لا تحتوي على operationId.",
         recommendation: "أضف operationId فريدًا لتحسين التوليد والتكامل والتتبع."
@@ -97,7 +103,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const insecureServers = (Array.isArray(spec.servers) ? spec.servers : []).filter((server: unknown) => isRecord(server) && typeof server.url === "string" && server.url.trim().toLowerCase().startsWith("http://"));\n  if (insecureServers.length) findings.push({ severity: "medium", code: "INSECURE_HTTP_SERVER", location: "servers", message: `${insecureServers.length} عنوان خادم يستخدم HTTP غير المشفر.`, recommendation: "استخدم HTTPS في بيئات الإنتاج، واحتفظ بـ HTTP فقط في مختبر محلي معزول عند الحاجة." });\n\n  const counts = findings.reduce((acc, item) => { acc[item.severity]++; return acc; }, { high: 0, medium: 0, low: 0, info: 0 });
+  const insecureServers = (Array.isArray(spec.servers) ? spec.servers : []).filter((server: unknown) => isRecord(server) && typeof server.url === "string" && server.url.trim().toLowerCase().startsWith("http://"));
+  if (insecureServers.length) findings.push({ severity: "medium", code: "INSECURE_HTTP_SERVER", location: "servers", message: `${insecureServers.length} عنوان خادم يستخدم HTTP غير المشفر.`, recommendation: "استخدم HTTPS في بيئات الإنتاج، واحتفظ بـ HTTP فقط في مختبر محلي معزول عند الحاجة." });
+
+  const counts = findings.reduce((acc, item) => { acc[item.severity]++; return acc; }, { high: 0, medium: 0, low: 0, info: 0 });
   return NextResponse.json({
     product: "ZALAM AI", mode: "STATIC_OPENAPI_REVIEW", openapiVersion: version,
     title: isRecord(spec.info) && typeof spec.info.title === "string" ? spec.info.title : null,
@@ -109,7 +118,8 @@ export async function POST(req: NextRequest) {
     limitations: [
       "تحليل ساكن لملف OpenAPI JSON فقط؛ لا يتم الاتصال بالخوادم أو تنفيذ الطلبات.",
       "النتائج مؤشرات للمراجعة وليست إثباتًا لوجود ثغرة أو غيابها.",
-      "لا يحلل حاليًا YAML أو تفاصيل التنفيذ الفعلي أو صلاحيات المستخدمين وقت التشغيل.",\n      "قد تكون بعض العمليات العامة أو عناوين HTTP مقصودة؛ راجع السياق قبل اعتبارها مشكلة."
+      "لا يحلل حاليًا YAML أو تفاصيل التنفيذ الفعلي أو صلاحيات المستخدمين وقت التشغيل.",
+      "قد تكون بعض العمليات العامة أو عناوين HTTP مقصودة؛ راجع السياق قبل اعتبارها مشكلة."
     ],
     reviewedAt: new Date().toISOString()
   });
