@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "بيانات الملف غير صالحة." }, { status: 400 });
   const input = body as Record<string, unknown>;
   if (typeof input.name !== "string" || typeof input.content !== "string" || !input.name.trim()) return NextResponse.json({ error: "اسم الملف ومحتواه مطلوبان." }, { status: 400 });
-  const name = input.name.split(/[\/]/).pop() || "";
+  const name = input.name.split(/[\\/]/).pop() || "";
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
   if (!allowedExtensions.has(ext)) return NextResponse.json({ error: "امتداد الملف غير مدعوم للتحليل النصي." }, { status: 415 });
   const content = input.content;
