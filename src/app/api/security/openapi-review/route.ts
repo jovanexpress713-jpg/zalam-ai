@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
       const params = [...pathParameters, ...(Array.isArray(operation.parameters) ? operation.parameters : [])];
       const declared = new Set(params.filter(isRecord).filter((p) => p.in === "path" && typeof p.name === "string").map((p) => p.name));
-      const placeholders = Array.from(path.matchAll(/\\{([^}]+)\\}/g), (match) => match[1]);
+      const placeholders = Array.from(path.matchAll(/\{([^}]+)\}/g), (match) => match[1]);
       for (const paramName of placeholders) if (!declared.has(paramName)) findings.push({
         severity: "medium", code: "UNDECLARED_PATH_PARAMETER", location,
         message: `المعامل {${paramName}} في المسار غير موثق كمعامل path.`,
