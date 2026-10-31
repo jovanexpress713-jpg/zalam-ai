@@ -16,21 +16,21 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "بيانات الملف غير صالحة." }, { status: 400 });
   const input = body as Record<string, unknown>;
   if (typeof input.name !== "string" || typeof input.content !== "string" || !input.name.trim()) return NextResponse.json({ error: "اسم الملف ومحتواه مطلوبان." }, { status: 400 });
-  const name = input.name.split(/[\\/]/).pop() || "";
+  const name = input.name.split(/[\/]/).pop() || "";
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
   if (!allowedExtensions.has(ext)) return NextResponse.json({ error: "امتداد الملف غير مدعوم للتحليل النصي." }, { status: 415 });
   const content = input.content;
-  if (content.length > MAX_BYTES || content.includes("\\u0000")) return NextResponse.json({ error: "الملف ليس نصيًا صالحًا أو يتجاوز الحد." }, { status: 415 });
-  const lines = content.split(/\\r?\\n/);
+  if (content.length > MAX_BYTES || content.includes("\u0000")) return NextResponse.json({ error: "الملف ليس نصيًا صالحًا أو يتجاوز الحد." }, { status: 415 });
+  const lines = content.split(/\r?\n/);
   const findings: Finding[] = [];
   const rules: { code: string; severity: Finding["severity"]; pattern: RegExp; message: string; recommendation: string }[] = [
     { code: "PRIVATE_KEY_MATERIAL", severity: "high", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/, message: "يبدو أن الملف يحتوي على مادة مفتاح خاص.", recommendation: "أزل المفتاح من الملف ودوّره فورًا إذا كان حقيقيًا." },
-    { code: "CLOUD_ACCESS_KEY", severity: "high", pattern: /\\bAKIA[0-9A-Z]{16}\\b/, message: "نمط يشبه مفتاح وصول سحابي.", recommendation: "تحقق منه وألغِ المفتاح المكشوف وأنشئ بديلًا محدود الصلاحيات." },
-    { code: "GENERIC_SECRET", severity: "high", pattern: /(?:api[_-]?key|secret|password|token)\\s*[:=]\\s*["'][^"']{12,}["']/i, message: "قيمة تبدو كسر أو كلمة مرور ثابتة.", recommendation: "انقل الأسرار إلى مخزن أسرار أو متغيرات بيئة ولا ترفعها للمستودع." },
-    { code: "DYNAMIC_CODE_EXECUTION", severity: "medium", pattern: /\\b(?:eval\\s*\\(|new Function\\s*\\(|exec\\s*\\(|child_process\\.(?:exec|spawn))/, message: "تم العثور على نمط تنفيذ ديناميكي أو أوامر نظام.", recommendation: "راجع مصدر المدخلات، وقيّد التنفيذ أو استبدله بواجهات محددة وآمنة." },
-    { code: "DISABLED_TLS_VALIDATION", severity: "high", pattern: /rejectUnauthorized\\s*:\\s*false|NODE_TLS_REJECT_UNAUTHORIZED\\s*=\\s*["']?0/, message: "تعطيل التحقق من شهادات TLS.", recommendation: "أعد التحقق من الشهادات ولا تتجاوز أخطاء TLS في الإنتاج." },
-    { code: "SQL_STRING_CONCAT", severity: "medium", pattern: /(?:SELECT|UPDATE|DELETE|INSERT)[^\\n]{0,100}\\+\\s*(?:req\\.|request\\.|params\\.|query\\.)/i, message: "احتمال بناء استعلام SQL بدمج مدخلات مباشرة.", recommendation: "استخدم الاستعلامات المعلّمة أو معاملات قاعدة البيانات." },
-    { code: "WILDCARD_CORS", severity: "low", pattern: /Access-Control-Allow-Origin\\s*[:=]\\s*["']\\*["']|cors\\s*\\(\\s*\\)/i, message: "سياسة CORS قد تسمح لجميع المصادر.", recommendation: "حدد مصادر الواجهة الموثوقة بدل السماح العام عند استخدام بيانات حساسة." }
+    { code: "CLOUD_ACCESS_KEY", severity: "high", pattern: /\bAKIA[0-9A-Z]{16}\b/, message: "نمط يشبه مفتاح وصول سحابي.", recommendation: "تحقق منه وألغِ المفتاح المكشوف وأنشئ بديلًا محدود الصلاحيات." },
+    { code: "GENERIC_SECRET", severity: "high", pattern: /(?:api[_-]?key|secret|password|token)\s*[:=]\s*["'][^"']{12,}["']/i, message: "قيمة تبدو كسر أو كلمة مرور ثابتة.", recommendation: "انقل الأسرار إلى مخزن أسرار أو متغيرات بيئة ولا ترفعها للمستودع." },
+    { code: "DYNAMIC_CODE_EXECUTION", severity: "medium", pattern: /\b(?:eval\s*\(|new Function\s*\(|exec\s*\(|child_process\.(?:exec|spawn))/, message: "تم العثور على نمط تنفيذ ديناميكي أو أوامر نظام.", recommendation: "راجع مصدر المدخلات، وقيّد التنفيذ أو استبدله بواجهات محددة وآمنة." },
+    { code: "DISABLED_TLS_VALIDATION", severity: "high", pattern: /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0/, message: "تعطيل التحقق من شهادات TLS.", recommendation: "أعد التحقق من الشهادات ولا تتجاوز أخطاء TLS في الإنتاج." },
+    { code: "SQL_STRING_CONCAT", severity: "medium", pattern: /(?:SELECT|UPDATE|DELETE|INSERT)[^\n]{0,100}\+\s*(?:req\.|request\.|params\.|query\.)/i, message: "احتمال بناء استعلام SQL بدمج مدخلات مباشرة.", recommendation: "استخدم الاستعلامات المعلّمة أو معاملات قاعدة البيانات." },
+    { code: "WILDCARD_CORS", severity: "low", pattern: /Access-Control-Allow-Origin\s*[:=]\s*["']\*["']|cors\s*\(\s*\)/i, message: "سياسة CORS قد تسمح لجميع المصادر.", recommendation: "حدد مصادر الواجهة الموثوقة بدل السماح العام عند استخدام بيانات حساسة." }
   ];
   for (let i = 0; i < lines.length; i++) {
     for (const rule of rules) if (rule.pattern.test(lines[i])) findings.push({ severity: rule.severity, code: rule.code, line: i + 1, message: rule.message, recommendation: rule.recommendation });
