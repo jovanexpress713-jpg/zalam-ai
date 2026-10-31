@@ -131,32 +131,25 @@ export type ImprovementProposal = {
   status: "proposed" | "tested" | "rejected";
 };
 
-const AUTONOMOUS_CHANGE_ALLOWLIST = [
-  /^src\\/components\\/(?!.*(?:auth|security|admin|billing)).+\\.(?:tsx?|jsx?)$/,
-  /^src\\/lib\\/(?!.*(?:auth|security|policy|secret|permission)).+\\.tsx?$/,
-  /^docs\\/.+\\.md$/
-];
-
-const PROTECTED_CHANGE_PATHS = [
-  /(^|\\/)(?:\.env(?:\\.|$)|secrets?)(?:\\/|$)/i,
-  /^\.github\\/workflows\\//i,
-  /(^|\\/)(?:auth|security-policy|permissions?|access-control)(?:\\.|\\/)/i,
-  /(^|\\/)(?:package-lock|pnpm-lock|yarn\.lock)/i
+const AUTONOMOUS_CHANGE_PREFIXES = ["src/components/", "src/lib/", "docs/"];
+const PROTECTED_PATH_PARTS = [
+  ".env", "secret", "auth", "security", "policy", "permission",
+  ".github/workflows/", "package-lock", "pnpm-lock", "yarn.lock"
 ];
 
 export function canApplyImprovement(proposal: ImprovementProposal): boolean {
   const safeFiles = proposal.changedFiles.length > 0 &&
-    proposal.changedFiles.every((file) =>
-      !file.startsWith("/") &&
-      !file.split("/").includes("..") &&
-      !PROTECTED_CHANGE_PATHS.some((pattern) => pattern.test(file)) &&
-      AUTONOMOUS_CHANGE_ALLOWLIST.some((pattern) => pattern.test(file))
-    );
+    proposal.changedFiles.every((rawPath) => {
+      const file = rawPath.replace(/\\\\/g, "/").toLowerCase();
+      const parts = file.split("/");
+      return !file.startsWith("/") &&
+        !parts.includes("..") &&
+        AUTONOMOUS_CHANGE_PREFIXES.some((prefix) => file.startsWith(prefix)) &&
+        !PROTECTED_PATH_PARTS.some((part) => file.includes(part));
+    });
 
-  return (
-    proposal.status !== "rejected" &&
+  return proposal.status !== "rejected" &&
     safeFiles &&
     proposal.tests.length > 0 &&
-    proposal.tests.every((test) => test.passed)
-  );
+    proposal.tests.every((test) => test.passed);
 }
