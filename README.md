@@ -50,6 +50,10 @@ Open `http://localhost:3000` and enter the same access token in the workspace.
 
 The intended safe lab is an isolated, explicitly scoped environment with target allowlists, written authorization, run approval, resource/time limits, audit logs, and resettable training targets. Scanning and exploitation should be enabled only against those lab targets. This lab runner is not implemented in the current MVP.
 
+## Engineering roadmap
+
+See [docs/PLATFORM_ROADMAP.md](docs/PLATFORM_ROADMAP.md) for the multi-domain assessment plan covering web, APIs, network infrastructure, Wi-Fi, Android/iOS, financial sandboxes, AI systems, execution controls, and release gates. Roadmap items are not implemented capabilities until tested.
+
 ## Status
 
 Build verification is tracked in the GitHub Actions workflow. A successful web build does not mean a provider is configured or that unimplemented features are available.
