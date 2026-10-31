@@ -82,7 +82,7 @@ async function inspectDns(hostname: string) {
   return {
     mx: mx.map((record) => ({ exchange: record.exchange, priority: record.priority })),
     nameservers: ns,
-    caa: caa.map((record) => ({ tag: record.tag, value: record.value, critical: record.critical })),
+    caa: caa.map((record) => ({ issue: record.issue ?? null, issuewild: record.issuewild ?? null, iodef: record.iodef ?? null, critical: record.critical })),
     mailSecurity: {
       spfPresent: txtRecords.some((record) => record.toLowerCase().startsWith("v=spf1")),
       dmarcPresent: txtRecords.some((record) => record.toLowerCase().startsWith("v=dmarc1"))
