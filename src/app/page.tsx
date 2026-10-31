@@ -3,6 +3,15 @@
 import { FormEvent, useEffect, useState } from "react";
 
 type Message = { role: "user" | "assistant"; content: string };
+type ScanResult = {
+  target: string;
+  mode: string;
+  httpStatus: number;
+  checkedAt: string;
+  summary: { total: number; passed: number; needsReview: number };
+  results: { name: string; status: string; recommendation: string | null }[];
+  limitations: string[];
+};
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -11,6 +20,10 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("أدخل رمز الوصول للمتابعة");
   const [historyReady, setHistoryReady] = useState(false);
+  const [labBusy, setLabBusy] = useState(false);
+  const [labMessage, setLabMessage] = useState("");
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [runtimeInfo, setRuntimeInfo] = useState<{state:string;provider:{configured:boolean};securityLab:{configured:boolean;mode:string}} | null>(null);
 
   useEffect(() => {
     setAccessToken(sessionStorage.getItem("zalam-access-token") || "");
@@ -39,6 +52,41 @@ export default function Home() {
     else sessionStorage.removeItem("zalam-access-token");
   }
 
+  async function authorizedFetch(path: string, method = "GET") {
+    return fetch(path, { method, headers: { "x-zalam-access-token": accessToken.trim() }, cache: "no-store" });
+  }
+
+  async function loadStatus() {
+    if (!accessToken.trim()) return;
+    setLabBusy(true);
+    setLabMessage("");
+    try {
+      const response = await authorizedFetch("/api/status");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "تعذر قراءة حالة النظام");
+      setRuntimeInfo(data);
+      setLabMessage("تم فحص إعدادات الخادم.");
+    } catch (error) {
+      setLabMessage(error instanceof Error ? error.message : "تعذر فحص الحالة");
+    } finally { setLabBusy(false); }
+  }
+
+  async function runPassiveScan() {
+    if (!accessToken.trim()) return;
+    setLabBusy(true);
+    setLabMessage("");
+    setScanResult(null);
+    try {
+      const response = await authorizedFetch("/api/security/scan", "POST");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "تعذر تنفيذ الفحص");
+      setScanResult(data);
+      setLabMessage("اكتمل الفحص السلبي للهدف المضبوط على الخادم.");
+    } catch (error) {
+      setLabMessage(error instanceof Error ? error.message : "تعذر تنفيذ الفحص");
+    } finally { setLabBusy(false); }
+  }
+
   async function send(e: FormEvent) {
     e.preventDefault();
     const text = prompt.trim();
@@ -50,10 +98,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-zalam-access-token": accessToken.trim()
-        },
+        headers: { "Content-Type": "application/json", "x-zalam-access-token": accessToken.trim() },
         body: JSON.stringify({ messages: next })
       });
       const data = await response.json();
@@ -64,27 +109,41 @@ export default function Home() {
       const message = error instanceof Error ? error.message : "حدث خطأ غير معروف";
       setMessages([...next, { role: "assistant", content: "تعذر الاتصال بالنموذج: " + message }]);
       setStatus("تعذر الاتصال");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   return (
     <main className="min-h-screen px-4 py-6 md:px-10">
       <header className="mx-auto flex max-w-5xl items-center justify-between border-b border-white/10 pb-5">
-        <div><div className="text-2xl font-black tracking-widest">ZALAM <span className="text-red-500">AI</span></div><p className="mt-1 text-xs text-slate-400">منصة قابلة للفحص والتطوير</p></div>
+        <div><div className="text-2xl font-black tracking-widest">ZALAM <span className="text-red-500">AI</span></div><p className="mt-1 text-xs text-slate-400">منصة ذكاء اصطناعي ومختبر أمني مصرح به</p></div>
         <span className="rounded-full border border-white/10 px-3 py-2 text-xs text-slate-300">{status}</span>
       </header>
-      <section className="mx-auto flex min-h-[75vh] max-w-5xl flex-col py-8">
+      <section className="mx-auto max-w-5xl py-8">
         <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <div className="flex items-center justify-between gap-3"><h1 className="text-xl font-bold">مساحة العمل</h1><button type="button" onClick={clearHistory} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">مسح المحادثات المحفوظة</button></div>
-          <p className="mt-2 text-sm leading-7 text-slate-400">أدخل رمز الوصول الذي ضبطته على الخادم. يُحفظ في جلسة المتصفح الحالية فقط. هذا رمز وصول مشترك وليس نظام حسابات مستخدمين.</p>
+          <div className="flex items-center justify-between gap-3"><h1 className="text-xl font-bold">مساحة العمل</h1><button type="button" onClick={clearHistory} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">مسح المحادثات</button></div>
+          <p className="mt-2 text-sm leading-7 text-slate-400">أدخل رمز الوصول المضبوط على الخادم. هذا رمز مشترك وليس نظام حسابات مستخدمين.</p>
           <label className="mt-4 block text-xs text-slate-400" htmlFor="access-token">رمز الوصول</label>
           <input id="access-token" type="password" autoComplete="current-password" value={accessToken} onChange={e => saveToken(e.target.value)} placeholder="ZALAM_ACCESS_TOKEN" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm outline-none focus:border-red-500" />
-          <p className="mt-3 text-xs leading-6 text-slate-500">تُحفظ آخر 100 رسالة محليًا في هذا المتصفح فقط. لا تُرسل المحادثات المحفوظة تلقائيًا إلى الخادم.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" disabled={!accessToken.trim() || labBusy} onClick={loadStatus} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{labBusy ? "جارٍ الفحص..." : "فحص حالة النظام"}</button>
+            <button type="button" disabled={!accessToken.trim() || labBusy} onClick={runPassiveScan} className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold disabled:opacity-40">{labBusy ? "جارٍ التنفيذ..." : "فحص أمني سلبي للهدف"}</button>
+          </div>
+          {runtimeInfo && <div className="mt-4 grid gap-2 rounded-xl bg-black/20 p-4 text-sm sm:grid-cols-3">
+            <p>المزوّد: <b>{runtimeInfo.provider.configured ? "مُعدّ" : "يحتاج إعدادًا"}</b></p>
+            <p>المختبر: <b>{runtimeInfo.securityLab.configured ? "مُعدّ" : "غير مُعدّ"}</b></p>
+            <p>الحالة: <b>{runtimeInfo.state}</b></p>
+          </div>}
+          {labMessage && <p className="mt-3 text-sm text-slate-300">{labMessage}</p>}
+          {scanResult && <div className="mt-4 rounded-xl border border-white/10 p-4">
+            <div className="flex flex-wrap justify-between gap-2"><b>نتيجة الفحص: {scanResult.target}</b><span className="text-xs text-slate-400">HTTP {scanResult.httpStatus}</span></div>
+            <p className="mt-2 text-sm">اجتاز {scanResult.summary.passed} من {scanResult.summary.total} · يحتاج مراجعة {scanResult.summary.needsReview}</p>
+            <ul className="mt-3 space-y-2">{scanResult.results.map((item) => <li key={item.name} className="flex flex-wrap justify-between gap-2 border-t border-white/10 pt-2 text-sm"><span>{item.name}</span><span className={item.status === "present" ? "text-emerald-400" : "text-amber-300"}>{item.status === "present" ? "موجود" : "يحتاج مراجعة"}</span>{item.recommendation && <p className="w-full text-xs text-slate-400">{item.recommendation}</p>}</li>)}</ul>
+            <p className="mt-3 text-xs leading-6 text-slate-500">{scanResult.limitations.join(" ")}</p>
+          </div>}
+          <p className="mt-3 text-xs leading-6 text-slate-500">آخر 100 رسالة تُحفظ محليًا في هذا المتصفح فقط. الفحص الأمني الحالي سلبي لترويسات HTTP على هدف HTTPS محدد مسبقًا في إعدادات الخادم؛ لا ينفذ استغلالًا.</p>
         </div>
-        <div className="flex-1 space-y-4">
-          {messages.length === 0 && <div className="py-16 text-center text-sm text-slate-500">اكتب رسالتك لبدء المحادثة</div>}
+        <div className="space-y-4">
+          {messages.length === 0 && <div className="py-12 text-center text-sm text-slate-500">اكتب رسالتك لبدء المحادثة</div>}
           {messages.map((m, i) => <article key={i} className={`max-w-[90%] rounded-2xl p-4 text-sm leading-7 ${m.role === "user" ? "mr-auto bg-red-950/40" : "ml-auto bg-white/[0.06]"}`}><div className="mb-1 text-xs text-slate-500">{m.role === "user" ? "أنت" : "ZALAM AI"}</div><p className="whitespace-pre-wrap">{m.content}</p></article>)}
         </div>
         <form onSubmit={send} className="mt-8 rounded-2xl border border-white/10 bg-[#11151d] p-3">
