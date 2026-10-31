@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       headers: { "User-Agent": "ZALAM-AI-Passive-Security-Check/1.0" },
       cache: "no-store"
     });
-    const results = checks.map((check) => ({
+    const results: { name: string; status: "present" | "missing" | "review"; recommendation: string | null }[] = checks.map((check) => ({
       name: check.title,
       status: response.headers.has(check.header) ? "present" : "missing",
       recommendation: response.headers.has(check.header) ? null : check.recommendation
