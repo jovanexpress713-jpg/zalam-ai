@@ -7,7 +7,8 @@ Arabic-first AI workspace foundation with a protected OpenAI-compatible provider
 - Arabic RTL chat interface.
 - Server-side OpenAI-compatible chat endpoint.
 - Shared workspace access gate for chat and model discovery.
-- Input validation and provider timeouts.
+- Input validation, a 100 KB chat request-body limit, and provider timeouts.
+- Baseline browser security headers: CSP, HSTS, frame denial, MIME sniffing protection, referrer policy, and restrictive browser permissions.
 - Local browser chat history (last 100 messages; not synced to a server).
 - Passive, server-configured HTTPS assessment: TLS certificate/handshake, selected HTTP security headers, and DNS posture (MX, TXT/SPF/DMARC indicators, CAA, NS).
 - Static OpenAPI 3.x JSON review: authentication declarations, undefined security schemes, path parameters, duplicate operation IDs, and basic operation metadata; exports JSON findings.
@@ -44,7 +45,8 @@ Open `http://localhost:3000` and enter the same access token in the workspace.
 ## Security notes
 
 - The access token is a shared workspace gate, not individual user authentication.
-- Use HTTPS when exposing the app outside localhost.
+- Use HTTPS when exposing the app outside localhost. HSTS is enabled by the app; only expose it behind a correctly configured HTTPS endpoint.
+- The CSP allows inline scripts/styles required by the current Next.js app but does not allow eval or arbitrary external connections. Re-test browser functionality when changing frontend dependencies.
 - Keep `.env.local` and all provider keys private; never commit secrets.
 - Browser history is stored in localStorage on that browser and can be cleared from the UI.
 - Do not expose a local model server directly to the public internet.
