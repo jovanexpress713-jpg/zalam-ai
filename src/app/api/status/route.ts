@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       mode: "PASSIVE_CHECKS_ONLY",
       note: "الفحص يعمل فقط على الهدف الذي يحدده مسؤول النظام في إعدادات الخادم."
     },
-    capabilities: ["chat", "local_history", "passive_security_headers", "tls_certificate_assessment"],
+    capabilities: ["chat", "local_history", "passive_security_headers", "tls_certificate_assessment", "dns_posture_inventory"],
     generatedAt: new Date().toISOString()
   });
 }
