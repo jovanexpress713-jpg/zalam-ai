@@ -3,10 +3,10 @@
 import { FormEvent, useEffect, useState } from "react";
 
 type Message = { role: "user" | "assistant"; content: string };
-type FinancialSimulation = { requestedAmount:number; currency:string; wallets:string[]; transfers:{id:string;from:string;to:string;amount:number;sequence:number}[]; detection:{suspiciousLayeringDetected:boolean;linkedWalletCount:number;linkedTransferCount:number;sourceToDestinationTraceable:boolean;severity:string;findings:string[]}; notice:string };
 type ScanResult = {
   target: string;
   mode: string;
+  tls?: { authorized: boolean; authorizationError: string | null; protocol: string | null; cipher: string | null; certificateValidTo: string | null };
   httpStatus: number;
   checkedAt: string;
   summary: { total: number; passed: number; needsReview: number };
@@ -24,8 +24,6 @@ export default function Home() {
   const [labBusy, setLabBusy] = useState(false);
   const [labMessage, setLabMessage] = useState("");
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-  const [simulation, setSimulation] = useState<FinancialSimulation | null>(null);
-  const [simulationBusy, setSimulationBusy] = useState(false);
   const [runtimeInfo, setRuntimeInfo] = useState<{state:string;provider:{configured:boolean};securityLab:{configured:boolean;mode:string}} | null>(null);
 
   useEffect(() => {
@@ -72,25 +70,6 @@ export default function Home() {
     } catch (error) {
       setLabMessage(error instanceof Error ? error.message : "تعذر فحص الحالة");
     } finally { setLabBusy(false); }
-  }
-
-  async function runFinancialSimulation() {
-    if (!accessToken.trim() || simulationBusy) return;
-    setSimulationBusy(true);
-    setSimulation(null);
-    try {
-      const response = await fetch("/api/security/financial-simulation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-zalam-access-token": accessToken.trim() },
-        body: JSON.stringify({ amount: 30000 }),
-        cache: "no-store"
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "تعذرت المحاكاة");
-      setSimulation(data);
-    } catch (error) {
-      setLabMessage(error instanceof Error ? error.message : "تعذرت المحاكاة");
-    } finally { setSimulationBusy(false); }
   }
 
   async function runPassiveScan() {
@@ -169,7 +148,6 @@ export default function Home() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button type="button" disabled={!accessToken.trim() || labBusy} onClick={loadStatus} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{labBusy ? "جارٍ الفحص..." : "فحص حالة النظام"}</button>
             <button type="button" disabled={!accessToken.trim() || labBusy} onClick={runPassiveScan} className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold disabled:opacity-40">{labBusy ? "جارٍ التنفيذ..." : "فحص أمني سلبي للهدف"}</button>
-            <button type="button" disabled={!accessToken.trim() || simulationBusy} onClick={runFinancialSimulation} className="rounded-xl border border-amber-500/40 px-4 py-2 text-sm text-amber-200 disabled:opacity-40">{simulationBusy ? "جارٍ تشغيل المحاكاة..." : "محاكاة تتبع 30,000 دولار"}</button>
           </div>
           {runtimeInfo && <div className="mt-4 grid gap-2 rounded-xl bg-black/20 p-4 text-sm sm:grid-cols-3">
             <p>المزوّد: <b>{runtimeInfo.provider.configured ? "مُعدّ" : "يحتاج إعدادًا"}</b></p>
@@ -177,21 +155,14 @@ export default function Home() {
             <p>الحالة: <b>{runtimeInfo.state}</b></p>
           </div>}
           {labMessage && <p className="mt-3 text-sm text-slate-300">{labMessage}</p>}
-          {simulation && <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/10 p-4">
-            <b>محاكاة مالية اصطناعية — {simulation.requestedAmount.toLocaleString()} {simulation.currency}</b>
-            <p className="mt-2 text-sm">تم ربط {simulation.detection.linkedWalletCount} محافظ و{simulation.detection.linkedTransferCount} تحويلات.</p>
-            <p className="mt-1 text-sm">اكتشاف التسلسل المشبوه: <b>{simulation.detection.suspiciousLayeringDetected ? "تم اكتشافه" : "لم يُكتشف"}</b> · إمكانية تتبع المصدر: <b>{simulation.detection.sourceToDestinationTraceable ? "نعم" : "لا"}</b></p>
-            <ol className="mt-3 space-y-2">{simulation.transfers.map(tx => <li key={tx.id} className="rounded-lg bg-black/20 p-2 text-xs">{tx.id}: {tx.from} ← {tx.to} · {tx.amount.toLocaleString()} USD تجريبي</li>)}</ol>
-            <p className="mt-3 text-xs text-slate-400">{simulation.notice}</p>
-          </div>}
           {scanResult && <div className="mt-4 rounded-xl border border-white/10 p-4">
-            <div className="flex flex-wrap justify-between gap-2"><b>نتيجة الفحص: {scanResult.target}</b><span className="text-xs text-slate-400">HTTP {scanResult.httpStatus}</span></div>
+            <div className="flex flex-wrap justify-between gap-2"><b>نتيجة الفحص: {scanResult.target}</b><span className="text-xs text-slate-400">HTTP {scanResult.httpStatus}</span><span className="text-xs text-slate-400">TLS {scanResult.tls?.protocol || "غير متاح"} · {scanResult.tls?.authorized ? "الشهادة موثوقة" : "راجع الشهادة"}</span></div>
             <p className="mt-2 text-sm">اجتاز {scanResult.summary.passed} من {scanResult.summary.total} · يحتاج مراجعة {scanResult.summary.needsReview}</p>
             <button type="button" onClick={exportScanReport} className="mt-3 rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200">تصدير التقرير JSON</button>
             <ul className="mt-3 space-y-2">{scanResult.results.map((item) => <li key={item.name} className="flex flex-wrap justify-between gap-2 border-t border-white/10 pt-2 text-sm"><span>{item.name}</span><span className={item.status === "present" ? "text-emerald-400" : "text-amber-300"}>{item.status === "present" ? "موجود" : "يحتاج مراجعة"}</span>{item.recommendation && <p className="w-full text-xs text-slate-400">{item.recommendation}</p>}</li>)}</ul>
             <p className="mt-3 text-xs leading-6 text-slate-500">{scanResult.limitations.join(" ")}</p>
           </div>}
-          <p className="mt-3 text-xs leading-6 text-slate-500">آخر 100 رسالة تُحفظ محليًا في هذا المتصفح فقط. الفحص الأمني الحالي سلبي لترويسات HTTP على هدف HTTPS محدد مسبقًا في إعدادات الخادم؛ لا ينفذ استغلالًا.</p>
+          <p className="mt-3 text-xs leading-6 text-slate-500">آخر 100 رسالة تُحفظ محليًا في هذا المتصفح فقط. الفحص الحالي يراجع ترويسات HTTP ومصافحة TLS للهدف المحدد مسبقًا في إعدادات الخادم؛ لا ينفذ استغلالًا.</p>
         </div>
         <div className="space-y-4">
           {messages.length === 0 && <div className="py-12 text-center text-sm text-slate-500">اكتب رسالتك لبدء المحادثة</div>}
