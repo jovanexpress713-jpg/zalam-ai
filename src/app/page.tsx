@@ -26,6 +26,9 @@ export default function Home() {
   const [labMessage, setLabMessage] = useState("");
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [runtimeInfo, setRuntimeInfo] = useState<{state:string;provider:{configured:boolean};securityLab:{configured:boolean;mode:string}} | null>(null);
+  const [apiReviewBusy, setApiReviewBusy] = useState(false);
+  const [apiReviewMessage, setApiReviewMessage] = useState("");
+  const [apiReview, setApiReview] = useState<any>(null);
 
   useEffect(() => {
     setAccessToken(sessionStorage.getItem("zalam-access-token") || "");
@@ -87,6 +90,41 @@ export default function Home() {
     } catch (error) {
       setLabMessage(error instanceof Error ? error.message : "تعذر تنفيذ الفحص");
     } finally { setLabBusy(false); }
+  }
+
+  async function reviewOpenApi(file?: File) {
+    if (!file || !accessToken.trim()) return;
+    setApiReviewBusy(true);
+    setApiReviewMessage("");
+    setApiReview(null);
+    try {
+      if (file.size > 1_048_576) throw new Error("حجم الملف أكبر من 1 MB.");
+      const spec = JSON.parse(await file.text());
+      const response = await fetch("/api/security/openapi-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-zalam-access-token": accessToken.trim() },
+        body: JSON.stringify({ spec })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "تعذرت مراجعة الملف");
+      setApiReview(data);
+      setApiReviewMessage("اكتملت مراجعة ملف OpenAPI دون الاتصال بالخادم الهدف.");
+    } catch (error) {
+      setApiReviewMessage(error instanceof Error ? error.message : "تعذرت مراجعة الملف");
+    } finally { setApiReviewBusy(false); }
+  }
+
+  function exportApiReview() {
+    if (!apiReview) return;
+    const blob = new Blob([JSON.stringify(apiReview, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "zalam-openapi-review.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   function exportScanReport() {
@@ -174,6 +212,34 @@ export default function Home() {
             <ul className="mt-3 space-y-2">{scanResult.results.map((item) => <li key={item.name} className="flex flex-wrap justify-between gap-2 border-t border-white/10 pt-2 text-sm"><span>{item.name}</span><span className={item.status === "present" ? "text-emerald-400" : "text-amber-300"}>{item.status === "present" ? "موجود" : "يحتاج مراجعة"}</span>{item.recommendation && <p className="w-full text-xs text-slate-400">{item.recommendation}</p>}</li>)}</ul>
             <p className="mt-3 text-xs leading-6 text-slate-500">{scanResult.limitations.join(" ")}</p>
           </div>}
+          <div className="mt-5 rounded-xl border border-white/10 p-4">
+            <h2 className="font-bold">مراجعة واجهات API — OpenAPI 3.x</h2>
+            <p className="mt-2 text-xs leading-6 text-slate-400">ارفع ملف JSON لمواصفات OpenAPI. يحلل المسارات والمصادقة ومعاملات المسارات دون إرسال أي طلب إلى الخادم المعرّف داخل الملف. الحد الأقصى 1 MB.</p>
+            <input type="file" accept=".json,application/json" disabled={!accessToken.trim() || apiReviewBusy} onChange={e => { const file = e.target.files?.[0]; void reviewOpenApi(file); e.currentTarget.value = ""; }} className="mt-3 block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-red-800 file:px-3 file:py-2 file:text-white" />
+            {apiReviewBusy && <p className="mt-3 text-sm text-slate-300">جارٍ تحليل المواصفات...</p>}
+            {apiReviewMessage && <p className="mt-3 text-sm text-slate-300">{apiReviewMessage}</p>}
+            {apiReview && <div className="mt-4">
+              <p className="text-sm font-semibold">{apiReview.title || "مواصفات API"} · OpenAPI {apiReview.openapiVersion}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                <p className="rounded-lg bg-black/20 p-3">العمليات: <b>{apiReview.operations}</b></p>
+                <p className="rounded-lg bg-black/20 p-3">المسارات: <b>{apiReview.paths}</b></p>
+                <p className="rounded-lg bg-black/20 p-3">دون مصادقة: <b>{apiReview.unauthenticatedOperations}</b></p>
+                <p className="rounded-lg bg-black/20 p-3">الملاحظات: <b>{apiReview.summary.findings}</b></p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <span className="rounded bg-red-950 px-2 py-1">عالية: {apiReview.summary.high}</span>
+                <span className="rounded bg-amber-950 px-2 py-1">متوسطة: {apiReview.summary.medium}</span>
+                <span className="rounded bg-slate-800 px-2 py-1">منخفضة: {apiReview.summary.low}</span>
+                <span className="rounded bg-slate-800 px-2 py-1">معلومات: {apiReview.summary.info}</span>
+              </div>
+              <button type="button" onClick={exportApiReview} className="mt-3 rounded-lg border border-white/15 px-3 py-2 text-xs">تصدير تقرير OpenAPI JSON</button>
+              <ul className="mt-3 space-y-3">{apiReview.findings.map((item: any, index: number) => <li key={item.code + item.location + index} className="border-t border-white/10 pt-3 text-sm">
+                <div className="flex flex-wrap justify-between gap-2"><b>{item.code}</b><span className={item.severity === "high" ? "text-red-400" : item.severity === "medium" ? "text-amber-300" : "text-slate-400"}>{item.severity}</span></div>
+                <p className="mt-1 text-xs text-slate-400">{item.location}</p><p className="mt-1">{item.message}</p><p className="mt-1 text-xs text-slate-400">{item.recommendation}</p>
+              </li>)}</ul>
+              <p className="mt-3 text-xs leading-6 text-slate-500">{apiReview.limitations.join(" ")}</p>
+            </div>}
+          </div>
           <p className="mt-3 text-xs leading-6 text-slate-500">آخر 100 رسالة تُحفظ محليًا في هذا المتصفح فقط. الفحص الحالي يراجع ترويسات HTTP ومصافحة TLS للهدف المحدد مسبقًا في إعدادات الخادم؛ لا ينفذ استغلالًا.</p>
         </div>
         <div className="space-y-4">
