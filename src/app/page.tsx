@@ -6,7 +6,7 @@ type Message = { role: "user" | "assistant"; content: string };
 type ScanResult = {
   target: string;
   mode: string;
-  tls?: { authorized: boolean; authorizationError: string | null; protocol: string | null; cipher: string | null; certificateValidTo: string | null };
+  tls?: { authorized: boolean; authorizationError: string | null; protocol: string | null; cipher: string | null; certificateValidTo: string | null };\n  dns?: { mx: { exchange: string; priority: number }[]; nameservers: string[]; caa: { issue: string | null; issuewild: string | null; iodef: string | null; critical: number }[]; mailSecurity: { spfPresent: boolean; dmarcPresent: boolean } };
   httpStatus: number;
   checkedAt: string;
   summary: { total: number; passed: number; needsReview: number };
@@ -158,6 +158,17 @@ export default function Home() {
           {scanResult && <div className="mt-4 rounded-xl border border-white/10 p-4">
             <div className="flex flex-wrap justify-between gap-2"><b>نتيجة الفحص: {scanResult.target}</b><span className="text-xs text-slate-400">HTTP {scanResult.httpStatus}</span><span className="text-xs text-slate-400">TLS {scanResult.tls?.protocol || "غير متاح"} · {scanResult.tls?.authorized ? "الشهادة موثوقة" : "راجع الشهادة"}</span></div>
             <p className="mt-2 text-sm">اجتاز {scanResult.summary.passed} من {scanResult.summary.total} · يحتاج مراجعة {scanResult.summary.needsReview}</p>
+            {scanResult.dns && <div className="mt-4 rounded-xl bg-black/20 p-3 text-sm">
+              <b>جرد DNS العام</b>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <p>SPF: <b>{scanResult.dns.mailSecurity.spfPresent ? "موجود" : "غير موجود/غير مكتشف"}</b></p>
+                <p>DMARC: <b>{scanResult.dns.mailSecurity.dmarcPresent ? "موجود" : "غير موجود/غير مكتشف"}</b></p>
+                <p>خوادم الأسماء: <b>{scanResult.dns.nameservers.length}</b></p>
+                <p>سجلات MX: <b>{scanResult.dns.mx.length}</b></p>
+              </div>
+              {scanResult.dns.nameservers.length > 0 && <p className="mt-2 break-all text-xs text-slate-400">NS: {scanResult.dns.nameservers.join(", ")}</p>}
+              {scanResult.dns.mx.length > 0 && <p className="mt-1 break-all text-xs text-slate-400">MX: {scanResult.dns.mx.map(x => x.exchange + " (" + x.priority + ")").join(", ")}</p>}
+            </div>}
             <button type="button" onClick={exportScanReport} className="mt-3 rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200">تصدير التقرير JSON</button>
             <ul className="mt-3 space-y-2">{scanResult.results.map((item) => <li key={item.name} className="flex flex-wrap justify-between gap-2 border-t border-white/10 pt-2 text-sm"><span>{item.name}</span><span className={item.status === "present" ? "text-emerald-400" : "text-amber-300"}>{item.status === "present" ? "موجود" : "يحتاج مراجعة"}</span>{item.recommendation && <p className="w-full text-xs text-slate-400">{item.recommendation}</p>}</li>)}</ul>
             <p className="mt-3 text-xs leading-6 text-slate-500">{scanResult.limitations.join(" ")}</p>
