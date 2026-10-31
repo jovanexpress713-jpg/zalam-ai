@@ -28,7 +28,12 @@ export default function Home() {
   const [runtimeInfo, setRuntimeInfo] = useState<{state:string;provider:{configured:boolean};securityLab:{configured:boolean;mode:string}} | null>(null);
   const [apiReviewBusy, setApiReviewBusy] = useState(false);
   const [apiReviewMessage, setApiReviewMessage] = useState("");
-  const [apiReview, setApiReview] = useState<any>(null);\n  const [providerHealth, setProviderHealth] = useState<any>(null);\n  const [providerHealthBusy, setProviderHealthBusy] = useState(false);\n  const [fileReview, setFileReview] = useState<any>(null);\n  const [fileReviewBusy, setFileReviewBusy] = useState(false);\n  const [fileReviewMessage, setFileReviewMessage] = useState("");
+  const [apiReview, setApiReview] = useState<any>(null);
+  const [providerHealth, setProviderHealth] = useState<any>(null);
+  const [providerHealthBusy, setProviderHealthBusy] = useState(false);
+  const [fileReview, setFileReview] = useState<any>(null);
+  const [fileReviewBusy, setFileReviewBusy] = useState(false);
+  const [fileReviewMessage, setFileReviewMessage] = useState("");
 
   useEffect(() => {
     setAccessToken(sessionStorage.getItem("zalam-access-token") || "");
@@ -233,7 +238,8 @@ export default function Home() {
           <label className="mt-4 block text-xs text-slate-400" htmlFor="access-token">رمز الوصول</label>
           <input id="access-token" type="password" autoComplete="current-password" value={accessToken} onChange={e => saveToken(e.target.value)} placeholder="ZALAM_ACCESS_TOKEN" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm outline-none focus:border-red-500" />
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" disabled={!accessToken.trim() || providerHealthBusy} onClick={checkProviderHealth} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{providerHealthBusy ? "جارٍ اختبار المزوّد..." : "اختبار اتصال الذكاء الاصطناعي"}</button>\n            <button type="button" disabled={!accessToken.trim() || labBusy} onClick={loadStatus} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{labBusy ? "جارٍ الفحص..." : "فحص حالة النظام"}</button>
+            <button type="button" disabled={!accessToken.trim() || providerHealthBusy} onClick={checkProviderHealth} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{providerHealthBusy ? "جارٍ اختبار المزوّد..." : "اختبار اتصال الذكاء الاصطناعي"}</button>
+            <button type="button" disabled={!accessToken.trim() || labBusy} onClick={loadStatus} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{labBusy ? "جارٍ الفحص..." : "فحص حالة النظام"}</button>
             <button type="button" disabled={!accessToken.trim() || labBusy} onClick={runPassiveScan} className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold disabled:opacity-40">{labBusy ? "جارٍ التنفيذ..." : "فحص أمني سلبي للهدف"}</button>
           </div>
           {runtimeInfo && <div className="mt-4 grid gap-2 rounded-xl bg-black/20 p-4 text-sm sm:grid-cols-3">
