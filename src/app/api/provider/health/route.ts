@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
   } catch {
     return NextResponse.json({ state: "INVALID_CONFIGURATION", reachable: false, error: "عنوان مزوّد النموذج غير صالح." }, { status: 500 });
   }
-  const basePath = endpoint.pathname.replace(/\\/$/, "");
-  endpoint.pathname = `${basePath}/models`.replace(/\\/models\\/models$/, "/models");
+  const basePath = endpoint.pathname.replace(/\/$/, "");
+  endpoint.pathname = `${basePath}/models`.replace(/\/models\/models$/, "/models");
   endpoint.search = "";
   endpoint.hash = "";
   const controller = new AbortController();
