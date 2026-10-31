@@ -10,10 +10,28 @@ export default function Home() {
   const [accessToken, setAccessToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("أدخل رمز الوصول للمتابعة");
+  const [historyReady, setHistoryReady] = useState(false);
 
   useEffect(() => {
     setAccessToken(sessionStorage.getItem("zalam-access-token") || "");
+    try {
+      const saved = localStorage.getItem("zalam-chat-history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setMessages(parsed.filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-100));
+      }
+    } catch { localStorage.removeItem("zalam-chat-history"); }
+    setHistoryReady(true);
   }, []);
+
+  useEffect(() => {
+    if (historyReady) localStorage.setItem("zalam-chat-history", JSON.stringify(messages.slice(-100)));
+  }, [messages, historyReady]);
+
+  function clearHistory() {
+    setMessages([]);
+    localStorage.removeItem("zalam-chat-history");
+  }
 
   function saveToken(value: string) {
     setAccessToken(value);
@@ -59,11 +77,11 @@ export default function Home() {
       </header>
       <section className="mx-auto flex min-h-[75vh] max-w-5xl flex-col py-8">
         <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <h1 className="text-xl font-bold">مساحة العمل</h1>
+          <div className="flex items-center justify-between gap-3"><h1 className="text-xl font-bold">مساحة العمل</h1><button type="button" onClick={clearHistory} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">مسح المحادثات المحفوظة</button></div>
           <p className="mt-2 text-sm leading-7 text-slate-400">أدخل رمز الوصول الذي ضبطته على الخادم. يُحفظ في جلسة المتصفح الحالية فقط. هذا رمز وصول مشترك وليس نظام حسابات مستخدمين.</p>
           <label className="mt-4 block text-xs text-slate-400" htmlFor="access-token">رمز الوصول</label>
           <input id="access-token" type="password" autoComplete="current-password" value={accessToken} onChange={e => saveToken(e.target.value)} placeholder="ZALAM_ACCESS_TOKEN" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm outline-none focus:border-red-500" />
-          <p className="mt-3 text-xs leading-6 text-slate-500">الأدوات والوكلاء ومختبر الأمن لا تُعد مفعّلة لمجرد ظهور هذه الواجهة؛ يلزم تنفيذها واختبارها كلٌّ على حدة.</p>
+          <p className="mt-3 text-xs leading-6 text-slate-500">تُحفظ آخر 100 رسالة محليًا في هذا المتصفح فقط. لا تُرسل المحادثات المحفوظة تلقائيًا إلى الخادم.</p>
         </div>
         <div className="flex-1 space-y-4">
           {messages.length === 0 && <div className="py-16 text-center text-sm text-slate-500">اكتب رسالتك لبدء المحادثة</div>}
