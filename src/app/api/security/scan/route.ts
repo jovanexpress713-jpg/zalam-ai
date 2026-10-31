@@ -129,7 +129,10 @@ export async function POST(req: NextRequest) {
     if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
       return NextResponse.json({ error: "تم رفض الهدف لأن اسم المضيف لا يحلّ إلى عناوين عامة مسموح بها." }, { status: 403 });
     }
-    const [tlsAssessment, dnsAssessment] = await Promise.all([\n      inspectTls(target.hostname, Number(target.port || 443)),\n      inspectDns(target.hostname)\n    ]);
+    const [tlsAssessment, dnsAssessment] = await Promise.all([
+      inspectTls(target.hostname, Number(target.port || 443)),
+      inspectDns(target.hostname)
+    ]);
     const response = await fetch(target, {
       method: "HEAD",
       redirect: "manual",
@@ -154,7 +157,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       target: target.origin,
       mode: "PASSIVE_HTTP_AND_TLS_CONFIGURATION",
-      tls: tlsAssessment,\n      dns: dnsAssessment,
+      tls: tlsAssessment,
+      dns: dnsAssessment,
       httpStatus: response.status,
       checkedAt: new Date().toISOString(),
       summary: { total: results.length, passed: results.length - missing, needsReview: missing },
