@@ -11,7 +11,15 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   try {
-    const rawBody = await req.text();\n    if (Buffer.byteLength(rawBody, "utf8") > 100_000) {\n      return NextResponse.json({ error: "حجم الطلب يتجاوز الحد المسموح (100 KB)." }, { status: 413 });\n    }\n    const body = JSON.parse(rawBody);
+    const rawBody = await req.text();
+    if (Buffer.byteLength(rawBody, "utf8") > 100_000) {
+      return NextResponse.json(
+        { error: "حجم الطلب يتجاوز الحد المسموح (100 KB)." },
+        { status: 413 }
+      );
+    }
+
+    const body = JSON.parse(rawBody);
     if (!body || !Array.isArray(body.messages) || body.messages.length < 1 || body.messages.length > 40) {
       return NextResponse.json({ error: "أرسل من 1 إلى 40 رسالة صالحة." }, { status: 400 });
     }
