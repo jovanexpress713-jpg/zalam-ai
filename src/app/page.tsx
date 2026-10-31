@@ -28,7 +28,7 @@ export default function Home() {
   const [runtimeInfo, setRuntimeInfo] = useState<{state:string;provider:{configured:boolean};securityLab:{configured:boolean;mode:string}} | null>(null);
   const [apiReviewBusy, setApiReviewBusy] = useState(false);
   const [apiReviewMessage, setApiReviewMessage] = useState("");
-  const [apiReview, setApiReview] = useState<any>(null);
+  const [apiReview, setApiReview] = useState<any>(null);\n  const [providerHealth, setProviderHealth] = useState<any>(null);\n  const [providerHealthBusy, setProviderHealthBusy] = useState(false);\n  const [fileReview, setFileReview] = useState<any>(null);\n  const [fileReviewBusy, setFileReviewBusy] = useState(false);\n  const [fileReviewMessage, setFileReviewMessage] = useState("");
 
   useEffect(() => {
     setAccessToken(sessionStorage.getItem("zalam-access-token") || "");
@@ -114,6 +114,54 @@ export default function Home() {
     } finally { setApiReviewBusy(false); }
   }
 
+  async function checkProviderHealth() {
+    if (!accessToken.trim()) return;
+    setProviderHealthBusy(true);
+    setProviderHealth(null);
+    try {
+      const response = await authorizedFetch("/api/provider/health");
+      const data = await response.json();
+      setProviderHealth(data);
+    } catch {
+      setProviderHealth({ state: "ERROR", reachable: false, error: "تعذر فحص اتصال المزوّد." });
+    } finally { setProviderHealthBusy(false); }
+  }
+
+  async function reviewTextFile(file?: File) {
+    if (!file || !accessToken.trim()) return;
+    setFileReviewBusy(true);
+    setFileReview(null);
+    setFileReviewMessage("");
+    try {
+      if (file.size > 1_048_576) throw new Error("الحد الأقصى لحجم الملف 1 MB.");
+      const content = await file.text();
+      const response = await fetch("/api/security/file-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-zalam-access-token": accessToken.trim() },
+        body: JSON.stringify({ name: file.name, content })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "تعذر تحليل الملف");
+      setFileReview(data);
+      setFileReviewMessage("اكتمل التحليل الساكن. لم يتم تشغيل الملف أو حفظه.");
+    } catch (error) {
+      setFileReviewMessage(error instanceof Error ? error.message : "تعذر تحليل الملف");
+    } finally { setFileReviewBusy(false); }
+  }
+
+  function exportFileReview() {
+    if (!fileReview) return;
+    const blob = new Blob([JSON.stringify(fileReview, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "zalam-file-review.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function exportApiReview() {
     if (!apiReview) return;
     const blob = new Blob([JSON.stringify(apiReview, null, 2)], { type: "application/json" });
@@ -185,7 +233,7 @@ export default function Home() {
           <label className="mt-4 block text-xs text-slate-400" htmlFor="access-token">رمز الوصول</label>
           <input id="access-token" type="password" autoComplete="current-password" value={accessToken} onChange={e => saveToken(e.target.value)} placeholder="ZALAM_ACCESS_TOKEN" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm outline-none focus:border-red-500" />
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" disabled={!accessToken.trim() || labBusy} onClick={loadStatus} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{labBusy ? "جارٍ الفحص..." : "فحص حالة النظام"}</button>
+            <button type="button" disabled={!accessToken.trim() || providerHealthBusy} onClick={checkProviderHealth} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{providerHealthBusy ? "جارٍ اختبار المزوّد..." : "اختبار اتصال الذكاء الاصطناعي"}</button>\n            <button type="button" disabled={!accessToken.trim() || labBusy} onClick={loadStatus} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40">{labBusy ? "جارٍ الفحص..." : "فحص حالة النظام"}</button>
             <button type="button" disabled={!accessToken.trim() || labBusy} onClick={runPassiveScan} className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold disabled:opacity-40">{labBusy ? "جارٍ التنفيذ..." : "فحص أمني سلبي للهدف"}</button>
           </div>
           {runtimeInfo && <div className="mt-4 grid gap-2 rounded-xl bg-black/20 p-4 text-sm sm:grid-cols-3">
@@ -238,6 +286,36 @@ export default function Home() {
                 <p className="mt-1 text-xs text-slate-400">{item.location}</p><p className="mt-1">{item.message}</p><p className="mt-1 text-xs text-slate-400">{item.recommendation}</p>
               </li>)}</ul>
               <p className="mt-3 text-xs leading-6 text-slate-500">{apiReview.limitations.join(" ")}</p>
+            </div>}
+          </div>
+          <div className="mt-5 rounded-xl border border-white/10 p-4">
+            <h2 className="font-bold">اتصال مزوّد الذكاء الاصطناعي</h2>
+            <p className="mt-2 text-xs leading-6 text-slate-400">يختبر الوصول إلى مسار models للمزوّد باستخدام إعدادات الخادم، ولا يعرض مفتاح API.</p>
+            {providerHealth && <div className="mt-3 rounded-lg bg-black/20 p-3 text-sm">
+              <b className={providerHealth.reachable ? "text-emerald-400" : "text-amber-300"}>{providerHealth.state}</b>
+              <p className="mt-1">{providerHealth.note || providerHealth.error}</p>
+              {providerHealth.configuredModel && <p className="mt-1 text-xs text-slate-400">النموذج المحدد: {providerHealth.configuredModel}</p>}
+            </div>}
+          </div>
+          <div className="mt-5 rounded-xl border border-white/10 p-4">
+            <h2 className="font-bold">تحليل الملفات الأمني الساكن</h2>
+            <p className="mt-2 text-xs leading-6 text-slate-400">يدعم ملفات النص والكود والإعدادات حتى 1 MB. يبحث عن أسرار مكشوفة وأنماط تنفيذ ديناميكي وتعطيل TLS ومؤشرات استعلامات SQL غير الآمنة. لا يشغّل الملف ولا يحفظه أو يرسله إلى مزوّد خارجي.</p>
+            <input type="file" accept=".txt,.md,.json,.yaml,.yml,.js,.jsx,.ts,.tsx,.py,.html,.css,.sql,.xml,.sh,.toml,.ini,.log" disabled={!accessToken.trim() || fileReviewBusy} onChange={e => { const file = e.target.files?.[0]; void reviewTextFile(file); e.currentTarget.value = ""; }} className="mt-3 block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-red-800 file:px-3 file:py-2 file:text-white" />
+            {fileReviewBusy && <p className="mt-3 text-sm text-slate-300">جارٍ تحليل الملف...</p>}
+            {fileReviewMessage && <p className="mt-3 text-sm text-slate-300">{fileReviewMessage}</p>}
+            {fileReview && <div className="mt-3">
+              <p className="text-sm font-semibold">{fileReview.fileName} · {fileReview.metrics.lines} سطر · {fileReview.metrics.bytes} بايت</p>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                <p className="rounded-lg bg-red-950 p-3">عالية: <b>{fileReview.summary.high}</b></p>
+                <p className="rounded-lg bg-amber-950 p-3">متوسطة: <b>{fileReview.summary.medium}</b></p>
+                <p className="rounded-lg bg-slate-800 p-3">منخفضة: <b>{fileReview.summary.low}</b></p>
+              </div>
+              <button type="button" onClick={exportFileReview} className="mt-3 rounded-lg border border-white/15 px-3 py-2 text-xs">تصدير تقرير الملف JSON</button>
+              <ul className="mt-3 space-y-3">{fileReview.findings.map((item: any, index: number) => <li key={item.code + item.line + index} className="border-t border-white/10 pt-3 text-sm">
+                <div className="flex justify-between gap-2"><b>{item.code}</b><span className="text-xs text-slate-400">سطر {item.line} · {item.severity}</span></div>
+                <p className="mt-1">{item.message}</p><p className="mt-1 text-xs text-slate-400">{item.recommendation}</p>
+              </li>)}</ul>
+              <p className="mt-3 text-xs leading-6 text-slate-500">{fileReview.limitations.join(" ")}</p>
             </div>}
           </div>
           <p className="mt-3 text-xs leading-6 text-slate-500">آخر 100 رسالة تُحفظ محليًا في هذا المتصفح فقط. الفحص الحالي يراجع ترويسات HTTP ومصافحة TLS للهدف المحدد مسبقًا في إعدادات الخادم؛ لا ينفذ استغلالًا.</p>
